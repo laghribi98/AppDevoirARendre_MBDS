@@ -9,11 +9,6 @@ import { catchError, map, tap } from 'rxjs/operators';
   providedIn: 'root',
 })
 export class AssignmentsService {
-  HttpOptions = {
-    header: new HttpHeaders({
-      'Content-type':'application/xml'
-    })
-  }
   assignments: Assignment[] = [
     {
       id: 1,
@@ -48,7 +43,7 @@ export class AssignmentsService {
 
     // return of(this.assignments);
 
-    return this.http.get<Assignment[]>(this.url, this.HttpOptions );
+    return this.http.get<Assignment[]>(this.url);
   }
 
   getAssignment(id: number): Observable<Assignment> {
