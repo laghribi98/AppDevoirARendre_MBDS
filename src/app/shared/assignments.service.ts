@@ -1,9 +1,10 @@
 import { Injectable } from '@angular/core';
 import { Assignment } from '../assignments/assignment.model';
-import { Observable, of } from 'rxjs';
+import { forkJoin, Observable, of } from 'rxjs';
 import { LoggingService } from './logging.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { catchError, map, tap } from 'rxjs/operators';
+import { bdInitialAssignments } from './data';
 
 @Injectable({
   providedIn: 'root',
@@ -35,7 +36,8 @@ export class AssignmentsService {
     private http: HttpClient
   ) {}
 
-  url = 'https://apimbds2021.herokuapp.com/api/assignments';
+  //url = 'https://apimbds2021.herokuapp.com/api/assignments';
+  url = 'http://localhost:8010/api/assignments';
 
   getAssignments(): Observable<Assignment[]> {
     console.log('Dans getAssignments dans le service...');
@@ -44,6 +46,16 @@ export class AssignmentsService {
     // return of(this.assignments);
 
     return this.http.get<Assignment[]>(this.url);
+  }
+
+  getAssignmentsPagine(
+    nextPage: Number = 1,
+    limit: Number = 10
+  ): Observable<Object> {
+    let urlPagination = this.url + `?page=${nextPage}&limit=${limit}`;
+
+    console.log('Requête paginée envoyée : ' + urlPagination);
+    return this.http.get<Object>(urlPagination);
   }
 
   getAssignment(id: number): Observable<Assignment> {
@@ -122,5 +134,38 @@ export class AssignmentsService {
     this.loggingService.log(assignment.nom, 'a été supprimé');
 
     return this.http.delete(this.url + '/' + assignment._id);
+  }
+
+  peuplerBase() {
+    // ici on va générer 500 assignments et les ajouter dans la base
+    bdInitialAssignments.forEach((a) => {
+      let newAssignment = new Assignment();
+      newAssignment.id = a.id;
+      newAssignment.nom = a.nom;
+      newAssignment.dateDeRendu = new Date(a.dateDeRendu);
+      newAssignment.rendu = a.rendu;
+
+      this.addAssignment(newAssignment).subscribe((reponse) => {
+        console.log('Assignment ' + reponse.message);
+      });
+    });
+  }
+
+  // autre version qui permet de récupérer un subscribe une fois que tous les inserts
+  // ont été effectués
+  peuplerBDJoin(): Observable<any> {
+    const calls = [];
+
+    bdInitialAssignments.forEach((a) => {
+      const new_assignment = new Assignment();
+
+      new_assignment.id = a.id;
+      new_assignment.nom = a.nom;
+      new_assignment.dateDeRendu = new Date(a.dateDeRendu);
+      new_assignment.rendu = false;
+
+      calls.push(this.addAssignment(new_assignment));
+    });
+    return forkJoin(calls); // renvoie un seul Observable pour dire que c'est fini
   }
 }

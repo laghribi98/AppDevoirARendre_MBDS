@@ -1,4 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
+import { filter, map, pairwise, tap, throttleTime } from 'rxjs/operators';
 import { AssignmentsService } from '../shared/assignments.service';
 import { Assignment } from './assignment.model';
 
@@ -8,23 +10,73 @@ import { Assignment } from './assignment.model';
   styleUrls: ['./assignments.component.css'],
 })
 export class AssignmentsComponent implements OnInit {
+  titre = 'Mon application sur les Assignments 2 !';
+  assignments: Assignment[] = [];
   assignmentSelectionne: Assignment;
-  // tableau des assignments
-  assignments: Assignment[];
 
-  constructor(private assignmentService: AssignmentsService) {}
+  // Pour la pagination
+  page: Number;
+  nextPage: Number = 1;
+  limit: Number = 10;
+  countAssignments: Number;
+
+  @ViewChild('scroller') scroller: CdkVirtualScrollViewport;
+
+  constructor(
+    private assignmentsService: AssignmentsService,
+    private ngZone: NgZone
+  ) {}
 
   ngOnInit(): void {
-    console.log('Demande des assignments via le service...');
-    // on utilise le service pour récupérer la liste des assignments
-    this.assignmentService.getAssignments().subscribe((assignements) => {
-      // on ne rentre ici que quand les données sont prêtes
-      // par ex, le service peut utiliser une BD distance et des WebService
-      // pour récupérer les données..
-      this.assignments = assignements;
-      console.log('Données reçues...');
+    /*
+    this.assignmentsService.getAssignments().subscribe((assignments) => {
+      // exécuté que quand les données sont réellement disponible
+      this.assignments = assignments;
     });
-    console.log('getAssignments appelé....');
+*/
+    this.getAssignments();
+  }
+
+  // avec pagination...
+  getAssignments() {
+    if (!this.nextPage) return;
+    this.assignmentsService
+      .getAssignmentsPagine(this.nextPage, this.limit)
+      .subscribe((data: any) => {
+        this.page = data.page;
+        this.nextPage = data.nextPage;
+        this.countAssignments = data.totalDocs;
+        this.assignments = this.assignments.concat(data.docs);
+      });
+  }
+
+  ngAfterViewInit() {
+    console.log('After view init');
+    this.scroller
+      .elementScrolled()
+      .pipe(
+        // on transforme les evenements en distances par rapport au bas du scroll
+        map((e) => {
+          return this.scroller.measureScrollOffset('bottom');
+        }),
+        tap((val) => {
+          //console.log(val);
+        }),
+        pairwise(),
+        filter(([y1, y2]) => {
+          return y2 < y1 && y2 < 140;
+        }),
+        throttleTime(200) // on n'enverra un subscribe que toutes les 200ms (on ignorera les evenements entre...)
+      )
+      .subscribe((_) => {
+        console.log(
+          "...Dans subscribe du scroller, je charge plus d'assignments"
+        );
+        this.ngZone.run(() => {
+          //this.addMoreAssignments();
+          this.getAssignments(); // déjà prêt car nextPage re-initialisé à chaque requête
+        });
+      });
   }
 
   assignmentClique(a: Assignment) {
@@ -34,13 +86,12 @@ export class AssignmentsComponent implements OnInit {
 
   onNouvelAssignment(newAssignment: Assignment) {
     //this.assignments.push(newAssignment);
-    this.assignmentService.addAssignment(newAssignment).subscribe((message) => {
-      // on ne rentre ici que quand l'ajout (insert) a bien été
-      // effectué !
-      console.log(message);
-    });
-
-    // et on cache le formulaire et on réaffiche la liste à jour
-    //this.formVisible = false;
+    this.assignmentsService
+      .addAssignment(newAssignment)
+      .subscribe((message) => {
+        // on ne rentre ici que quand l'ajout (insert) a bien été
+        // effectué !
+        console.log(message);
+      });
   }
 }
